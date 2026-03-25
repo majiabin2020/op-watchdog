@@ -11,7 +11,7 @@ class GatewayManager:
         """Check if any openclawgateway process is running."""
         for proc in psutil.process_iter(["name"]):
             try:
-                if GATEWAY_PROCESS_NAME.lower() in (proc.info["name"] or "").lower():
+                if GATEWAY_PROCESS_NAME.lower() in (proc.info["name"] or "").lower():  # matches "openclawgateway.exe"
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
@@ -37,17 +37,20 @@ class GatewayManager:
 
     def stop(self) -> None:
         """Run 'openclaw gateway stop' silently."""
-        subprocess.run(
-            ["powershell", "-Command", GATEWAY_STOP_CMD],
-            creationflags=subprocess.CREATE_NO_WINDOW,
-            timeout=15,
-        )
+        try:
+            subprocess.run(
+                ["powershell", "-Command", GATEWAY_STOP_CMD],
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                timeout=15,
+            )
+        except subprocess.TimeoutExpired:
+            pass  # stop command timed out; caller will check via is_process_running()
 
     def kill_all(self) -> None:
         """Forcefully kill all openclawgateway processes via psutil."""
         for proc in psutil.process_iter(["name"]):
             try:
-                if GATEWAY_PROCESS_NAME.lower() in (proc.info["name"] or "").lower():
+                if GATEWAY_PROCESS_NAME.lower() in (proc.info["name"] or "").lower():  # matches "openclawgateway.exe"
                     proc.kill()
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
