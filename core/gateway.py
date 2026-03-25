@@ -9,7 +9,7 @@ class GatewayManager:
         """Check if any openclawgateway process is running."""
         for proc in psutil.process_iter(["name"]):
             try:
-                if GATEWAY_PROCESS_NAME.lower() in proc.info["name"].lower():
+                if GATEWAY_PROCESS_NAME.lower() in (proc.info["name"] or "").lower():
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
