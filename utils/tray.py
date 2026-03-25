@@ -3,7 +3,6 @@ import threading
 from typing import Callable, Optional
 
 import pystray
-from PIL import Image
 
 from assets.icon import create_icon
 from config import APP_NAME
@@ -18,11 +17,16 @@ class TrayManager:
         on_exit: Callable,
         notifier: Notifier,
         autostart: AutostartManager,
+        main_thread_dispatch: Optional[Callable[[Callable], None]] = None,
     ):
         self._on_show_window = on_show_window
         self._on_exit = on_exit
         self._notifier = notifier
         self._autostart = autostart
+        # dispatch schedules a no-arg callable onto the main thread.
+        # In production: lambda fn: root.after(0, fn)
+        # In tests / fallback: call directly
+        self._dispatch = main_thread_dispatch or (lambda fn: fn())
         self._icon: Optional[pystray.Icon] = None
 
     def _build_menu(self) -> pystray.Menu:
@@ -41,19 +45,18 @@ class TrayManager:
         )
 
     def _handle_show(self, icon, item) -> None:
-        self._on_show_window()
+        self._dispatch(self._on_show_window)
 
     def _handle_toggle_autostart(self, icon, item) -> None:
         if self._autostart.is_enabled():
             self._autostart.disable()
         else:
             self._autostart.enable()
-        # Rebuild menu to reflect new state
         icon.menu = self._build_menu()
 
     def _handle_exit(self, icon, item) -> None:
         icon.stop()
-        self._on_exit()
+        self._dispatch(self._on_exit)
 
     def start(self) -> None:
         """Start the tray icon in a background thread."""
@@ -64,7 +67,6 @@ class TrayManager:
             APP_NAME,
             menu=self._build_menu(),
         )
-        # Double-click shows window
         self._icon.default_action = self._handle_show
         self._notifier.set_icon(self._icon)
 
@@ -77,3 +79,5 @@ class TrayManager:
                 self._icon.stop()
             except Exception:
                 pass
+            finally:
+                self._icon = None
