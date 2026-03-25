@@ -16,6 +16,7 @@ class AutostartManager:
             return False
 
     def enable(self) -> None:
+        # sys.executable points to the bundled .exe when packaged with PyInstaller
         exe_path = sys.executable
         with winreg.OpenKey(
             winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE
