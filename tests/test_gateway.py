@@ -56,3 +56,40 @@ class TestIsAlive:
         with patch.object(gw, "is_process_running", return_value=True), \
              patch.object(gw, "is_port_open", return_value=False):
             assert gw.is_alive() is False
+
+class TestStop:
+    def test_stop_runs_correct_command(self, gw):
+        with patch("subprocess.run") as mock_run:
+            gw.stop()
+            mock_run.assert_called_once()
+            call_args = mock_run.call_args
+            # command contains "openclaw gateway stop"
+            cmd = " ".join(call_args[0][0])
+            assert "openclaw" in cmd and "stop" in cmd
+
+class TestKillAll:
+    def test_kills_matching_processes(self, gw):
+        mock_proc = MagicMock()
+        mock_proc.info = {"name": "openclawgateway.exe"}
+        mock_proc.kill = MagicMock()
+        with patch("psutil.process_iter", return_value=[mock_proc]):
+            gw.kill_all()
+            mock_proc.kill.assert_called_once()
+
+    def test_skips_non_matching_processes(self, gw):
+        mock_proc = MagicMock()
+        mock_proc.info = {"name": "chrome.exe"}
+        mock_proc.kill = MagicMock()
+        with patch("psutil.process_iter", return_value=[mock_proc]):
+            gw.kill_all()
+            mock_proc.kill.assert_not_called()
+
+class TestStart:
+    def test_start_launches_powershell(self, gw):
+        with patch("subprocess.Popen") as mock_popen:
+            gw.start()
+            mock_popen.assert_called_once()
+            call_args = mock_popen.call_args
+            cmd = " ".join(call_args[0][0])
+            assert "powershell" in cmd.lower()
+            assert "openclawgateway" in cmd

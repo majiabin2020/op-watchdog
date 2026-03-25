@@ -1,7 +1,9 @@
 # core/gateway.py
 import socket
+import subprocess
+import time
 import psutil
-from config import GATEWAY_PORT, SOCKET_TIMEOUT, GATEWAY_PROCESS_NAME
+from config import GATEWAY_PORT, SOCKET_TIMEOUT, GATEWAY_PROCESS_NAME, GATEWAY_STOP_CMD, GATEWAY_START_CMD, STOP_WAIT
 
 
 class GatewayManager:
@@ -26,3 +28,26 @@ class GatewayManager:
     def is_alive(self) -> bool:
         """Both process running AND port open = truly alive."""
         return self.is_process_running() and self.is_port_open()
+
+    def start(self) -> subprocess.Popen:
+        """Launch openclawgateway in a visible PowerShell window.
+        Returns the Popen handle so caller can manage it."""
+        cmd = ["powershell", "-NoExit", "-Command", GATEWAY_START_CMD]
+        return subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
+
+    def stop(self) -> None:
+        """Run 'openclaw gateway stop' silently."""
+        subprocess.run(
+            ["powershell", "-Command", GATEWAY_STOP_CMD],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            timeout=15,
+        )
+
+    def kill_all(self) -> None:
+        """Forcefully kill all openclawgateway processes via psutil."""
+        for proc in psutil.process_iter(["name"]):
+            try:
+                if GATEWAY_PROCESS_NAME.lower() in (proc.info["name"] or "").lower():
+                    proc.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
