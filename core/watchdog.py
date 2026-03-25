@@ -86,6 +86,7 @@ class WatchdogThread:
             return
         self.restart_count = 0  # Reset counter for new session
         self._stop_event.clear()
+        self._set_state(WatchdogState.STARTING)  # Set synchronously before thread spawns
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -96,7 +97,7 @@ class WatchdogThread:
 
     def _run(self) -> None:
         """Main watchdog loop."""
-        self._set_state(WatchdogState.STARTING)
+        # State is already STARTING (set by start_watching before this thread spawned)
 
         # ── Phase 1: Initial startup ──────────────────────────────────
         if self._gateway.is_alive():

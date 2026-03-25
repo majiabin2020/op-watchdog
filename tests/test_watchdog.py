@@ -74,16 +74,22 @@ class TestRunLoop:
     """Integration tests for the _run() state machine."""
 
     def test_already_alive_goes_directly_to_running(self, mock_gateway):
-        """If gateway is already running, skip startup and enter RUNNING."""
+        """If gateway is already running, skip startup and enter RUNNING.
+
+        STARTING is set synchronously by start_watching() before the thread
+        spawns, so it is not emitted from within _run() itself.  Simulate the
+        same precondition by setting it manually before calling _run().
+        """
         mock_gateway.is_alive.return_value = True
         wd = WatchdogThread(gateway=mock_gateway)
         states = []
         wd.on_status_change = states.append
+        # Replicate what start_watching() does: set STARTING before _run()
+        wd._state = WatchdogState.STARTING
         # Patch the monitor loop to exit immediately
         wd._stop_event.set()
         with patch("time.sleep"):
             wd._run()
-        assert WatchdogState.STARTING in states
         assert WatchdogState.RUNNING in states
 
     def test_startup_failure_sets_stopped_after_max_retries(self, mock_gateway):
