@@ -1,15 +1,20 @@
 # assets/icon.py
-from PIL import Image, ImageDraw
+import os
+import sys
+
+from PIL import Image
+
+
+def _ico_path() -> str:
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(base, "assets", "icon.ico")
 
 
 def create_icon(size: int = 64) -> Image.Image:
-    """Create a simple crayfish-style icon: dark background, green circle."""
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    # Dark background circle
-    draw.ellipse([2, 2, size - 2, size - 2], fill=(13, 17, 23, 255))
-    # Green dot (online indicator style)
-    cx, cy = size // 2, size // 2
-    r = size // 4
-    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(63, 185, 80, 255))
-    return img
+    """Load icon.ico for use as tray/window icon."""
+    return Image.open(_ico_path()).resize((size, size), Image.LANCZOS)
+
+
+def ico_path() -> str:
+    """Return absolute path to icon.ico (for tkinter iconbitmap)."""
+    return _ico_path()

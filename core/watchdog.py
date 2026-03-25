@@ -6,7 +6,7 @@ from typing import Callable, Optional
 
 from config import (
     MONITOR_INTERVAL, STARTUP_TIMEOUT, MAX_RETRY_COUNT,
-    CHECK_INTERVAL, STOP_WAIT
+    CHECK_INTERVAL,
 )
 from core.gateway import GatewayManager
 
@@ -24,6 +24,7 @@ class WatchdogThread:
         self._state = WatchdogState.STOPPED
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        self._current_proc = None  # Track current gateway Popen handle
         self.restart_count = 0
 
         # Callbacks — set by UI layer
@@ -55,21 +56,25 @@ class WatchdogThread:
             self.on_restart_count(self.restart_count)
 
     def _cleanup_stale_process(self) -> None:
-        """Stop and kill any lingering gateway process before starting fresh."""
+        """Close previous PowerShell window and kill any lingering gateway process."""
+        if self._current_proc is not None:
+            try:
+                self._current_proc.terminate()
+            except Exception:
+                pass
+            self._current_proc = None
         if self._gateway.is_process_running():
-            self._log("→ 检测到残留进程，尝试停止...")
-            self._gateway.stop()
-            time.sleep(STOP_WAIT)
-            if self._gateway.is_process_running():
-                self._log("→ 残留进程未退出，强制终止...")
-                self._gateway.kill_all()
+            self._log("→ 检测到残留进程，强制终止...")
+            self._gateway.kill_all()
+            time.sleep(3)  # 等待 OS 释放端口 18789
 
     def _attempt_start(self) -> bool:
         """Try to start the gateway. Returns True on success."""
         self._cleanup_stale_process()
         self._log("⚡ 正在调用 PowerShell 启动网关...")
-        self._gateway.start()
-        # Wait up to STARTUP_TIMEOUT seconds, but respect stop requests
+        self._current_proc = self._gateway.start()
+        # Wait up to STARTUP_TIMEOUT seconds, but respect stop requests.
+        # Also exit early if the node process never appeared / already died.
         elapsed = 0
         while elapsed < STARTUP_TIMEOUT:
             if self._stop_event.is_set():
@@ -78,6 +83,16 @@ class WatchdogThread:
             elapsed += CHECK_INTERVAL
             if self._gateway.is_alive():
                 return True
+            # Early-exit: after 10 s, if no node process is running the start
+            # command failed quickly (e.g. port still occupied). Clean up and
+            # let the caller retry immediately instead of waiting 90 s.
+            if elapsed >= 10 and not self._gateway.is_process_running():
+                self._log("→ 网关进程启动后意外退出（可能端口冲突），立即清理重试...")
+                self._cleanup_stale_process()
+                return False
+        # Full timeout — kill what we started so next attempt is clean
+        self._log("→ 启动超时，清理本次残留进程，准备下次重试...")
+        self._cleanup_stale_process()
         return False
 
     def start_watching(self) -> None:
@@ -123,17 +138,24 @@ class WatchdogThread:
         # ── Phase 2: Monitor loop ─────────────────────────────────────
         check_count = 0
         while not self._stop_event.is_set():
-            # Sleep MONITOR_INTERVAL seconds, checking stop_event frequently
-            for _ in range(MONITOR_INTERVAL):
+            # Sleep MONITOR_INTERVAL seconds.
+            # Every CHECK_INTERVAL seconds, also do a cheap process check so
+            # that if the gateway dies mid-countdown we skip the remaining wait.
+            for tick in range(MONITOR_INTERVAL):
                 if self._stop_event.is_set():
                     return
                 time.sleep(1)
+                if tick > 0 and tick % CHECK_INTERVAL == 0:
+                    if not self._gateway.is_alive():
+                        self._log("⚡ 检测到网关进程意外退出，跳过等待立即重启...")
+                        break
+            else:
+                # Countdown completed normally → scheduled check
+                check_count += 1
+                self._log(f"→ 定时检查中... (第 {check_count} 次)")
 
             if self._stop_event.is_set():
                 return
-
-            check_count += 1
-            self._log(f"→ 定时检查中... (第 {check_count} 次)")
 
             if self._gateway.is_alive():
                 self._log("✓ 网关运行正常")

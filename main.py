@@ -1,5 +1,27 @@
 # main.py
+import ctypes
 import sys
+
+# ── Single-instance guard ─────────────────────────────────────────────────────
+# CreateMutexW returns ERROR_ALREADY_EXISTS (183) if another instance holds it.
+_MUTEX = ctypes.windll.kernel32.CreateMutexW(None, True, "LaomaClawWatchdog_SingleInstance")
+if ctypes.windll.kernel32.GetLastError() == 183:
+    ctypes.windll.user32.MessageBoxW(
+        0,
+        "老马OpenClaw小龙虾看门狗已经在运行中。",
+        "已在运行",
+        0x30,  # MB_ICONWARNING
+    )
+    sys.exit(0)
+
+# ── DPI awareness — must be called before tkinter starts ──────────────────────
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)  # System DPI aware
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
 
 from core.gateway import GatewayManager
 from core.watchdog import WatchdogThread, WatchdogState

@@ -1,9 +1,10 @@
 # ui/main_window.py
-import threading
+import ctypes
 import tkinter as tk
 from datetime import datetime
 from typing import Callable, Optional
 
+from assets.icon import ico_path
 from config import APP_NAME, APP_VERSION, MONITOR_INTERVAL
 from core.watchdog import WatchdogState
 
@@ -52,7 +53,30 @@ class MainWindow:
         root.title(APP_NAME)
         root.configure(bg=BG)
         root.resizable(False, False)
-        root.geometry("480x520")
+
+        # Scale window geometry to match actual display DPI.
+        # Primary: Windows API (reliable before window is shown).
+        # Fallback: tkinter winfo_fpixels.
+        try:
+            dpi = ctypes.windll.user32.GetDpiForSystem()  # Windows 8.1+
+            if dpi <= 0:
+                raise ValueError
+        except Exception:
+            try:
+                root.update_idletasks()
+                dpi = root.winfo_fpixels("1i")
+            except Exception:
+                dpi = 96
+        scale = dpi / 96
+        root.tk.call("tk", "scaling", dpi / 72)  # fix tkinter font scaling
+        w, h = int(480 * scale), int(580 * scale)
+        root.geometry(f"{w}x{h}")
+        root.minsize(int(480 * scale), int(540 * scale))
+
+        try:
+            root.iconbitmap(ico_path())
+        except Exception:
+            pass
 
         # ── Title bar ─────────────────────────────────────────────────
         title_frame = tk.Frame(root, bg=BG2, pady=8)
@@ -175,6 +199,7 @@ class MainWindow:
 
     def _handle_stop(self):
         self._on_stop()
+        self.append_log("● 监控已关闭 · 网关仍在运行，但看门狗不再自动重启")
 
     # ── Public API (called by watchdog callbacks) ──────────────────────
 
@@ -189,19 +214,30 @@ class MainWindow:
             self._status_label.config(text="在线", fg=GREEN)
             self._footer_label.config(text="监控中 · 已缩小到托盘后持续运行")
             self._start_countdown()
+            # 开始看门 dimmed, 关闭看门 highlighted
+            self._start_btn.config(bg=BG2, fg="#444c56", activebackground=BG2, relief=tk.FLAT)
+            self._stop_btn.config(bg=RED, fg=BG, activebackground="#cc5a50", relief=tk.FLAT)
         elif state == WatchdogState.STARTING:
             self._status_dot.config(fg=YELLOW)
             self._status_label.config(text="启动中", fg=YELLOW)
             self._stop_countdown()
+            self._start_btn.config(bg=BG2, fg="#444c56", activebackground=BG2, relief=tk.FLAT)
+            self._stop_btn.config(bg=BG2, fg="#444c56", activebackground=BG2, relief=tk.FLAT)
         elif state == WatchdogState.RESTARTING:
             self._status_dot.config(fg=YELLOW)
             self._status_label.config(text="重启中", fg=YELLOW)
             self._stop_countdown()
+            self._start_btn.config(bg=BG2, fg="#444c56", activebackground=BG2, relief=tk.FLAT)
+            self._stop_btn.config(bg=BG2, fg="#444c56", activebackground=BG2, relief=tk.FLAT)
         elif state == WatchdogState.STOPPED:
-            self._status_dot.config(fg=RED)
-            self._status_label.config(text="离线", fg=RED)
+            # 不改变网关在线/离线状态 — 关闭的是监控，网关可能仍在运行
+            self._status_dot.config(fg=GREY)
+            self._status_label.config(text="未监控", fg=GREY)
             self._footer_label.config(text="监控已停止")
             self._stop_countdown()
+            # 开始看门 highlighted, 关闭看门 dimmed
+            self._start_btn.config(bg=GREEN, fg=BG, activebackground="#2ea043", relief=tk.FLAT)
+            self._stop_btn.config(bg=BG, fg="#444c56", activebackground=BG2, relief=tk.SOLID)
 
     def on_restart_count(self, count: int) -> None:
         self._root.after(0, self._restart_val.config, {"text": str(count)})

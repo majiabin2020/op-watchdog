@@ -38,7 +38,7 @@ class TrayManager:
         return pystray.Menu(
             pystray.MenuItem(APP_NAME, None, enabled=False),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("显示主窗口", self._handle_show),
+            pystray.MenuItem("显示主窗口", self._handle_show, default=True),
             pystray.MenuItem(autostart_label, self._handle_toggle_autostart),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("退出", self._handle_exit),
@@ -67,7 +67,6 @@ class TrayManager:
             APP_NAME,
             menu=self._build_menu(),
         )
-        self._icon.default_action = self._handle_show
         self._notifier.set_icon(self._icon)
 
         thread = threading.Thread(target=self._icon.run, daemon=True)

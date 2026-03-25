@@ -54,20 +54,16 @@ class TestStateTransitions:
 
 
 class TestCleanupBeforeStart:
-    def test_calls_stop_when_process_running(self, watchdog, mock_gateway):
+    def test_kills_immediately_when_process_running(self, watchdog, mock_gateway):
         mock_gateway.is_process_running.return_value = True
         watchdog._cleanup_stale_process()
-        mock_gateway.stop.assert_called_once()
-
-    def test_calls_kill_when_stop_leaves_process(self, watchdog, mock_gateway):
-        mock_gateway.is_process_running.side_effect = [True, True]
-        watchdog._cleanup_stale_process()
         mock_gateway.kill_all.assert_called_once()
+        mock_gateway.stop.assert_not_called()
 
-    def test_skips_stop_when_no_process(self, watchdog, mock_gateway):
+    def test_skips_kill_when_no_process(self, watchdog, mock_gateway):
         mock_gateway.is_process_running.return_value = False
         watchdog._cleanup_stale_process()
-        mock_gateway.stop.assert_not_called()
+        mock_gateway.kill_all.assert_not_called()
 
 
 class TestRunLoop:

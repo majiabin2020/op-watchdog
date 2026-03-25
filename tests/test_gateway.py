@@ -1,7 +1,6 @@
 # tests/test_gateway.py
 import socket
 from unittest.mock import patch, MagicMock
-import psutil
 import pytest
 from core.gateway import GatewayManager
 
@@ -12,7 +11,7 @@ def gw():
 class TestIsProcessRunning:
     def test_returns_true_when_process_exists(self, gw):
         mock_proc = MagicMock()
-        mock_proc.info = {"name": "openclawgateway.exe"}
+        mock_proc.info = {"name": "node.exe", "cmdline": ["node", "C:\\openclaw\\gateway.js"]}
         with patch("psutil.process_iter", return_value=[mock_proc]):
             assert gw.is_process_running() is True
 
@@ -20,41 +19,32 @@ class TestIsProcessRunning:
         with patch("psutil.process_iter", return_value=[]):
             assert gw.is_process_running() is False
 
+    def test_returns_false_when_node_but_not_openclaw(self, gw):
+        mock_proc = MagicMock()
+        mock_proc.info = {"name": "node.exe", "cmdline": ["node", "C:\\other\\app.js"]}
+        with patch("psutil.process_iter", return_value=[mock_proc]):
+            assert gw.is_process_running() is False
+
     def test_case_insensitive_match(self, gw):
         mock_proc = MagicMock()
-        mock_proc.info = {"name": "OpenClawGateway.EXE"}
+        mock_proc.info = {"name": "Node.EXE", "cmdline": ["Node", "C:\\OpenClaw\\gateway.js"]}
         with patch("psutil.process_iter", return_value=[mock_proc]):
             assert gw.is_process_running() is True
 
-class TestIsPortOpen:
-    def test_returns_true_when_port_connectable(self, gw):
+class TestIsAlive:
+    def test_alive_when_port_connectable(self, gw):
         with patch("socket.create_connection") as mock_conn:
             mock_conn.return_value.__enter__ = MagicMock(return_value=None)
             mock_conn.return_value.__exit__ = MagicMock(return_value=False)
-            assert gw.is_port_open() is True
-
-    def test_returns_false_when_port_refused(self, gw):
-        with patch("socket.create_connection", side_effect=ConnectionRefusedError):
-            assert gw.is_port_open() is False
-
-    def test_returns_false_on_timeout(self, gw):
-        with patch("socket.create_connection", side_effect=socket.timeout):
-            assert gw.is_port_open() is False
-
-class TestIsAlive:
-    def test_alive_when_both_pass(self, gw):
-        with patch.object(gw, "is_process_running", return_value=True), \
-             patch.object(gw, "is_port_open", return_value=True):
             assert gw.is_alive() is True
 
-    def test_not_alive_when_process_missing(self, gw):
-        with patch.object(gw, "is_process_running", return_value=False), \
-             patch.object(gw, "is_port_open", return_value=True):
+    def test_not_alive_when_connection_refused(self, gw):
+        with patch("socket.create_connection", side_effect=ConnectionRefusedError):
             assert gw.is_alive() is False
 
-    def test_not_alive_when_port_closed(self, gw):
-        with patch.object(gw, "is_process_running", return_value=True), \
-             patch.object(gw, "is_port_open", return_value=False):
+    def test_not_alive_on_timeout(self, gw):
+        import socket
+        with patch("socket.create_connection", side_effect=socket.timeout):
             assert gw.is_alive() is False
 
 class TestStop:
@@ -63,20 +53,19 @@ class TestStop:
             gw.stop()
             mock_run.assert_called_once()
             call_args = mock_run.call_args
-            # command contains "openclaw gateway stop"
             cmd = " ".join(call_args[0][0])
             assert "openclaw" in cmd and "stop" in cmd
 
 class TestKillAll:
-    def test_kills_matching_processes(self, gw):
+    def test_kills_all_node_processes(self, gw):
         mock_proc = MagicMock()
-        mock_proc.info = {"name": "openclawgateway.exe"}
+        mock_proc.info = {"name": "node.exe"}
         mock_proc.kill = MagicMock()
         with patch("psutil.process_iter", return_value=[mock_proc]):
             gw.kill_all()
             mock_proc.kill.assert_called_once()
 
-    def test_skips_non_matching_processes(self, gw):
+    def test_skips_non_node_processes(self, gw):
         mock_proc = MagicMock()
         mock_proc.info = {"name": "chrome.exe"}
         mock_proc.kill = MagicMock()
@@ -85,11 +74,11 @@ class TestKillAll:
             mock_proc.kill.assert_not_called()
 
 class TestStart:
-    def test_start_launches_powershell(self, gw):
+    def test_start_launches_cmd(self, gw):
         with patch("subprocess.Popen") as mock_popen:
             gw.start()
             mock_popen.assert_called_once()
             call_args = mock_popen.call_args
             cmd = " ".join(call_args[0][0])
-            assert "powershell" in cmd.lower()
-            assert "openclawgateway" in cmd
+            assert "cmd" in cmd.lower()
+            assert "openclaw gateway" in cmd
