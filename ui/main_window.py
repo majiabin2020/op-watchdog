@@ -229,6 +229,7 @@ class MainWindow:
     # ── Countdown timer ───────────────────────────────────────────────
 
     def _start_countdown(self) -> None:
+        self._stop_countdown()  # Cancel any existing timer before starting fresh
         self._countdown = MONITOR_INTERVAL
         self._tick_countdown()
 
@@ -245,10 +246,9 @@ class MainWindow:
         self._countdown_val.config(text=f"{mins:02d}:{secs:02d}")
         if self._countdown > 0:
             self._countdown -= 1
-            self._countdown_job = self._root.after(1000, self._tick_countdown)
         else:
             self._countdown = MONITOR_INTERVAL
-            self._tick_countdown()
+        self._countdown_job = self._root.after(1000, self._tick_countdown)
 
     # ── Window management ─────────────────────────────────────────────
 
