@@ -69,9 +69,11 @@ class WatchdogThread:
         self._cleanup_stale_process()
         self._log("⚡ 正在调用 PowerShell 启动网关...")
         self._gateway.start()
-        # Wait up to STARTUP_TIMEOUT seconds
+        # Wait up to STARTUP_TIMEOUT seconds, but respect stop requests
         elapsed = 0
         while elapsed < STARTUP_TIMEOUT:
+            if self._stop_event.is_set():
+                return False
             time.sleep(CHECK_INTERVAL)
             elapsed += CHECK_INTERVAL
             if self._gateway.is_alive():
@@ -82,6 +84,7 @@ class WatchdogThread:
         """Called when user clicks '开始看门'."""
         if self._state != WatchdogState.STOPPED:
             return
+        self.restart_count = 0  # Reset counter for new session
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()

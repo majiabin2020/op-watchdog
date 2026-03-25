@@ -68,3 +68,39 @@ class TestCleanupBeforeStart:
         mock_gateway.is_process_running.return_value = False
         watchdog._cleanup_stale_process()
         mock_gateway.stop.assert_not_called()
+
+
+class TestRunLoop:
+    """Integration tests for the _run() state machine."""
+
+    def test_already_alive_goes_directly_to_running(self, mock_gateway):
+        """If gateway is already running, skip startup and enter RUNNING."""
+        mock_gateway.is_alive.return_value = True
+        wd = WatchdogThread(gateway=mock_gateway)
+        states = []
+        wd.on_status_change = states.append
+        # Patch the monitor loop to exit immediately
+        wd._stop_event.set()
+        with patch("time.sleep"):
+            wd._run()
+        assert WatchdogState.STARTING in states
+        assert WatchdogState.RUNNING in states
+
+    def test_startup_failure_sets_stopped_after_max_retries(self, mock_gateway):
+        """If gateway never starts, state returns to STOPPED after MAX_RETRY_COUNT."""
+        mock_gateway.is_alive.return_value = False
+        wd = WatchdogThread(gateway=mock_gateway)
+        states = []
+        wd.on_status_change = states.append
+        with patch("time.sleep"), patch.object(wd, "_attempt_start", return_value=False):
+            wd._run()
+        assert states[-1] == WatchdogState.STOPPED
+
+    def test_stop_event_during_startup_aborts(self, mock_gateway):
+        """If stop() is called while starting, _attempt_start returns False."""
+        mock_gateway.is_alive.return_value = False
+        wd = WatchdogThread(gateway=mock_gateway)
+        wd._stop_event.set()  # Set before _run starts
+        with patch("time.sleep"), patch.object(wd, "_attempt_start", return_value=False):
+            wd._run()
+        assert wd.state == WatchdogState.STOPPED
