@@ -1,6 +1,7 @@
 # main.py
 import ctypes
 import sys
+from config import APP_ID
 
 # ── Single-instance guard ─────────────────────────────────────────────────────
 # CreateMutexW returns ERROR_ALREADY_EXISTS (183) if another instance holds it.
@@ -22,6 +23,11 @@ except Exception:
         ctypes.windll.user32.SetProcessDPIAware()
     except Exception:
         pass
+
+try:
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+except Exception:
+    pass
 
 from core.gateway import GatewayManager
 from core.watchdog import WatchdogThread, WatchdogState
@@ -45,6 +51,7 @@ def main():
         on_hide=lambda: window.hide(),
         on_exit=lambda: _exit(watchdog, tray),
     )
+    window.set_gateway_presence(gateway.is_quick_alive())
 
     # ── Create tray — pass main_thread_dispatch for thread safety ─────
     tray = TrayManager(
@@ -60,6 +67,7 @@ def main():
     watchdog.on_log = window.append_log
     watchdog.on_notify = notifier.send
     watchdog.on_restart_count = window.on_restart_count
+    watchdog.on_gateway_presence = window.set_gateway_presence
 
     # ── Start ─────────────────────────────────────────────────────────
     tray.start()

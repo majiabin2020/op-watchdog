@@ -4,6 +4,8 @@ import tkinter as tk
 from datetime import datetime
 from typing import Callable, Optional
 
+from PIL import Image, ImageTk
+
 from assets.icon import ico_path
 from config import APP_NAME, APP_VERSION, MONITOR_INTERVAL
 from core.watchdog import WatchdogState
@@ -39,9 +41,11 @@ class MainWindow:
 
         self._root = tk.Tk()
         self._state = WatchdogState.STOPPED
+        self._gateway_online = False
         self._restart_count = 0
         self._countdown = MONITOR_INTERVAL
         self._countdown_job = None
+        self._window_icon = None
 
         self._build_ui()
         self._root.protocol("WM_DELETE_WINDOW", self._on_hide)  # ✕ → hide, not quit
@@ -75,6 +79,12 @@ class MainWindow:
 
         try:
             root.iconbitmap(ico_path())
+        except Exception:
+            pass
+        try:
+            icon_image = Image.open(ico_path())
+            self._window_icon = ImageTk.PhotoImage(icon_image)
+            root.iconphoto(True, self._window_icon)
         except Exception:
             pass
 
@@ -207,9 +217,19 @@ class MainWindow:
         """Thread-safe: schedule UI update on main thread."""
         self._root.after(0, self._apply_state, state)
 
+    def set_gateway_presence(self, online: bool) -> None:
+        """Thread-safe update for gateway online/offline presence."""
+        self._root.after(0, self._apply_gateway_presence, online)
+
+    def _apply_gateway_presence(self, online: bool) -> None:
+        self._gateway_online = online
+        if self._state == WatchdogState.STOPPED:
+            self._apply_state(WatchdogState.STOPPED)
+
     def _apply_state(self, state: WatchdogState) -> None:
         self._state = state
         if state == WatchdogState.RUNNING:
+            self._gateway_online = True
             self._status_dot.config(fg=GREEN)
             self._status_label.config(text="在线", fg=GREEN)
             self._footer_label.config(text="监控中 · 已缩小到托盘后持续运行")
@@ -230,10 +250,14 @@ class MainWindow:
             self._start_btn.config(bg=BG2, fg="#444c56", activebackground=BG2, relief=tk.FLAT)
             self._stop_btn.config(bg=BG2, fg="#444c56", activebackground=BG2, relief=tk.FLAT)
         elif state == WatchdogState.STOPPED:
-            # 不改变网关在线/离线状态 — 关闭的是监控，网关可能仍在运行
-            self._status_dot.config(fg=GREY)
-            self._status_label.config(text="未监控", fg=GREY)
-            self._footer_label.config(text="监控已停止")
+            if self._gateway_online:
+                self._status_dot.config(fg=GREEN)
+                self._status_label.config(text="在线", fg=GREEN)
+                self._footer_label.config(text="网关在线 · 当前未监控")
+            else:
+                self._status_dot.config(fg=RED)
+                self._status_label.config(text="离线", fg=RED)
+                self._footer_label.config(text="网关离线 · 当前未监控")
             self._stop_countdown()
             # 开始看门 highlighted, 关闭看门 dimmed
             self._start_btn.config(bg=GREEN, fg=BG, activebackground="#2ea043", relief=tk.FLAT)

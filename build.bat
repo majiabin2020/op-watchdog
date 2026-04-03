@@ -8,14 +8,7 @@ if %errorlevel% neq 0 (
 )
 
 echo Building 老马OpenClaw小龙虾看门狗...
-pyinstaller ^
-  --onefile ^
-  --noconsole ^
-  --icon=assets/icon.ico ^
-  --add-data="assets/icon.ico;assets" ^
-  --name="老马OpenClaw小龙虾看门狗" ^
-  --clean ^
-  main.py
+pyinstaller --onefile --noconsole --icon=assets/icon.ico --add-data="assets/icon.ico;assets" --name="老马OpenClaw小龙虾看门狗" --clean main.py
 if %errorlevel% neq 0 (
     echo ERROR: PyInstaller build failed
     pause
